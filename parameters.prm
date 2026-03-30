@@ -1,5 +1,5 @@
 # ----------------------------------------
-#               FLEXODEAL
+#         FLEXODEAL (HADI'S MODEL)
 # ----------------------------------------
 #          Listing of Parameters
 # ----------------------------------------
@@ -12,7 +12,7 @@ subsection Finite element system
   set Quadrature order  = 5
 
   # Type of simulation (dynamic or quasi-static)
-  set Type of simulation = dynamic
+  set Type of simulation = quasi-static
 end
 
 
