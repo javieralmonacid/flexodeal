@@ -21,21 +21,21 @@ subsection Geometry
   set Global refinement   = 2
 
   # Muscle length [m]
-  set Muscle length = 0.27
-
-  # Aponeurosis length [m]
-  set Aponeurosis length = 0.208
-
-  # Aponeurosis height [m]
-  set Aponeurosis height = 0.003
+  set Muscle length = 0.270
 
   # Muscle width [m]
   set Muscle width = 0.055
 
+  # Aponeurosis height [m]
+  set Aponeurosis height = 0.003
+
+  # Initial fibre length [m]
+  set Fibre length = 0.065
+
   # Pennation angle muscle fibres [deg]
-  # This is the angle between the fibres and the line
-  # of action (LOA), which is taken here as the x-axis.
-  set Pennation angle = 15.3
+  # This is the angle between the fibres and the 
+  # aponeurosis
+  set Pennation angle = 15
 
   # Global grid scaling factor (note that this factor
   # scales the grid and nothing else)
@@ -192,10 +192,10 @@ subsection Time
   # End time [s]
   # To obtain data for the very last time step, add 1e-08 to
   # the desired end time
-  set End time       = 1.00000001
+  set End time       = 0.40000001
 
   # Time step size [s]
-  set Time step size = 0.01
+  set Time step size = 0.04
 end
 
 

@@ -177,9 +177,9 @@ namespace Flexodeal
     {
       unsigned int global_refinement;
       double       muscle_length;
-      double       aponeurosis_length;
-      double       aponeurosis_height;
       double       muscle_width;
+      double       aponeurosis_height;
+      double       fibre_length;
       double       pennation_angle;
       double       scale;
       double       p_p0;
@@ -202,21 +202,21 @@ namespace Flexodeal
                           Patterns::Double(0.0),
                           "Muscle length (x direction)");
 
-        prm.declare_entry("Aponeurosis length", "1.0",
+        prm.declare_entry("Muscle width", "1.0",
                           Patterns::Double(0.0),
-                          "Aponeurosis length");
+                          "Muscle width (y direction)");
 
         prm.declare_entry("Aponeurosis height", "1.0",
                           Patterns::Double(0.0),
                           "Aponeurosis height");
 
-        prm.declare_entry("Muscle width", "1.0",
+        prm.declare_entry("Fibre length", "0.0",
                           Patterns::Double(0.0),
-                          "Muscle width (y direction)");
+                         "Initial fibre length");
 
         prm.declare_entry("Pennation angle", "0.0",
                           Patterns::Double(0.0),
-                          "Pennation angle (angle between fibres and LOA)");
+                          "Pennation angle (angle between fibres and aponeurosis)");
 
         prm.declare_entry("Grid scale",
                           "1e-3",
@@ -237,9 +237,9 @@ namespace Flexodeal
       {
         global_refinement = prm.get_integer("Global refinement");
         muscle_length     = prm.get_double("Muscle length");
-        aponeurosis_length = prm.get_double("Aponeurosis length");
-        aponeurosis_height = prm.get_double("Aponeurosis height");
         muscle_width      = prm.get_double("Muscle width");
+        aponeurosis_height = prm.get_double("Aponeurosis height");
+        fibre_length      = prm.get_double("Fibre length");
         pennation_angle   = prm.get_double("Pennation angle") * M_PI / 180.0;
         scale             = prm.get_double("Grid scale");
         p_p0              = prm.get_double("Pressure ratio p/p0");
@@ -2768,25 +2768,19 @@ namespace Flexodeal
   template <int dim>
   void Solid<dim>::make_grid()
   {
-    // This is the angle opposite to the length of the muscle (i.e. the line of action)
-    const double gamma_0 = M_PI - std::asin(std::sin(parameters.pennation_angle) * (parameters.muscle_length / parameters.aponeurosis_length));
-    // Compute initial fibre length
-    const double initial_fibre_length = parameters.aponeurosis_length * std::sin(parameters.pennation_angle + gamma_0) / std::sin(parameters.pennation_angle);
-    const double alpha_0_tilde = M_PI - gamma_0 - parameters.pennation_angle;
-    
-    // Define parallelepiped edges
-    const Tensor<1,dim> 
-    edge_along_fibre({initial_fibre_length * std::cos(parameters.pennation_angle),
-                      0.0,
-                      initial_fibre_length * std::sin(parameters.pennation_angle)});
-    const Tensor<1,dim>
-    edge_along_apo_length({parameters.aponeurosis_length * std::abs(std::cos(alpha_0_tilde)),
-                           0.0,
-                           -parameters.aponeurosis_length * std::sin(alpha_0_tilde)});
-    const Tensor<1,dim>
-    edge_along_width({0.0, parameters.muscle_width, 0.0}); 
-    const Tensor<1,dim>
-    edge_along_apo_height({0.0, 0.0, parameters.aponeurosis_height});
+    // This geometry was used in Hadi's 2014 paper (Regionalizing muscle activity
+    // causes changes...)
+
+    // Compute aponeurosis length
+    double aponeurosis_length = parameters.muscle_length - parameters.fibre_length * std::cos(parameters.pennation_angle);
+
+    // Define edge vectors
+    const Tensor<1,dim> edge_along_fibre({-parameters.fibre_length * std::cos(parameters.pennation_angle), 
+                                          0.0,
+                                          parameters.fibre_length * std::sin(parameters.pennation_angle)});
+    const Tensor<1,dim> edge_along_apo_length({aponeurosis_length, 0.0, 0.0});
+    const Tensor<1,dim> edge_along_width({0.0, parameters.muscle_width, 0.0});
+    const Tensor<1,dim> edge_along_apo_height({0.0, 0.0, parameters.aponeurosis_height});
 
     // Define subdivisions
     const std::vector<unsigned int> 
@@ -2819,11 +2813,11 @@ namespace Flexodeal
       //
       //                    "+z face"  1
       //               _______________________
-      //              /                      /
-      //"-x face"  2 /                      /  3  "+x face"
-      //            /______________________/
+      //               \                       \
+      //"-x face"  2    \                       \ 3  "+x face"
+      //                 \_______________________\
       //
-      //                 "-z face"  0
+      //                        "-z face"  0
       //
       // with "-y face" as 4 and "+y face" as 5 (so not quite as in 
       // GridGenerator::hyper_rectangle)
@@ -2900,10 +2894,10 @@ namespace Flexodeal
                   cell->face(face)->set_boundary_id(99);
                   break;
                 case 2:
-                  cell->face(face)->set_boundary_id(0);
+                  cell->face(face)->set_boundary_id(6);
                   break;
                 case 3:
-                  cell->face(face)->set_boundary_id(7);
+                  cell->face(face)->set_boundary_id(1);
                   break;
                 case 4:
                   cell->face(face)->set_boundary_id(2);
@@ -2919,9 +2913,9 @@ namespace Flexodeal
     // Construct top aponeurosis
     Triangulation<dim> tria_apo_top;
     {
-      const Point<dim> origin(initial_fibre_length * std::cos(parameters.pennation_angle),
+      const Point<dim> origin(-parameters.fibre_length * std::cos(parameters.pennation_angle),
                               0.0,
-                              initial_fibre_length * std::sin(parameters.pennation_angle));
+                              parameters.fibre_length * std::sin(parameters.pennation_angle));
       
       std::array<Tensor<1,dim>, 3> edges;
       edges[0] = edge_along_apo_height;
@@ -2954,10 +2948,10 @@ namespace Flexodeal
                   cell->face(face)->set_boundary_id(5);
                   break;
                 case 2:
-                  cell->face(face)->set_boundary_id(6);
+                  cell->face(face)->set_boundary_id(0);
                   break;
                 case 3:
-                  cell->face(face)->set_boundary_id(1);
+                  cell->face(face)->set_boundary_id(7);
                   break;
                 case 4:
                   cell->face(face)->set_boundary_id(2);
@@ -2980,9 +2974,6 @@ namespace Flexodeal
     std::cout << "Geometry:"
               << "\n\t Reference volume:          " << vol_reference << " m^3"
               << "\n\t Mass:                      " << vol_reference * parameters.muscle_density << " kg"
-              << "\n\t Fibre length:              " << initial_fibre_length << " m"
-              << "\n\t Fibre/Apo angle (alpha_0): " << (M_PI - gamma_0) * 180.0 / M_PI << " degrees"
-              << "\n\t Fibre/LOA angle (beta_0):  " << parameters.pennation_angle * 180.0 / M_PI << " degrees"
               << "\n" << std::endl;
 
   }
@@ -3347,12 +3338,7 @@ namespace Flexodeal
 
     // If a custom QP_FILE is not given, then we handle the QP file internally.
     if (varargs.at("-QP_FILE").empty())
-    {
-      // Precompute angle for aponeurosis fibre orientation
-      const double 
-      beta_apo = std::asin(parameters.muscle_length * std::sin(parameters.pennation_angle) 
-                            / parameters.aponeurosis_length) - parameters.pennation_angle;
-      
+    { 
       // Initialize an FEValues element to obtain QP location.
       FEValues<dim> fe_values(fe, qf_cell, update_quadrature_points);
       
@@ -3386,7 +3372,7 @@ namespace Flexodeal
           case 1:
             // Muscle
             qp_data["max_iso_stress_muscle"] = parameters.max_iso_stress_muscle;
-            qp_data["muscle_fibre_orientation_x"] = std::cos(parameters.pennation_angle);
+            qp_data["muscle_fibre_orientation_x"] = -std::cos(parameters.pennation_angle);
             qp_data["muscle_fibre_orientation_y"] = 0.0;
             qp_data["muscle_fibre_orientation_z"] = std::sin(parameters.pennation_angle);
             qp_data["fat_fraction"] = parameters.fat_fraction;
@@ -3395,9 +3381,9 @@ namespace Flexodeal
           case 2:
             // Aponeurosis
             qp_data["max_iso_stress_muscle"] = parameters.max_iso_stress_aponeurosis;
-            qp_data["muscle_fibre_orientation_x"] = std::cos(beta_apo);
+            qp_data["muscle_fibre_orientation_x"] = 1.0;
             qp_data["muscle_fibre_orientation_y"] = 0.0;
-            qp_data["muscle_fibre_orientation_z"] = -std::sin(beta_apo);
+            qp_data["muscle_fibre_orientation_z"] = 0.0;
             qp_data["fat_fraction"] = 0.0;
             break;
           
@@ -5913,21 +5899,8 @@ namespace Flexodeal
     mean_muscle_velocity = mean_muscle_velocity / volume_slab;
     mean_strain_rate = mean_strain_rate / volume_slab;
 
-    double initial_fibre_length = 0.0;
-    {
-      // This computation is likely *not* valid for geometries that are not the 
-      // one in Solid<dim>::make_grid, so this quantity must be updated 
-      // appropriately whenever a different mesh is used.
-
-      // This is the angle opposite to the length of the muscle (i.e. the line of action)
-      const double gamma_0 = M_PI - std::asin(std::sin(parameters.pennation_angle) 
-                           * (parameters.muscle_length / parameters.aponeurosis_length));
-      // Compute initial fibre length
-      initial_fibre_length = parameters.aponeurosis_length 
-                           * std::sin(parameters.pennation_angle + gamma_0) 
-                           / std::sin(parameters.pennation_angle);
-    }
-    const double strain_rate_naught = parameters.max_strain_rate;
+    const double &initial_fibre_length = parameters.fibre_length;
+    const double &strain_rate_naught = parameters.max_strain_rate;
 
     // Output time series:
     //
